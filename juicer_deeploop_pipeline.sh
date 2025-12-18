@@ -49,17 +49,17 @@ if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES" ] || [ -z "$OUT_DIR" ]; 
 fi
 
 # Configs & paths to softwares
-JUICER_JAR="/mnt/storage_6/project_data/pl0457-01/pekowska_lab_software/juicer/scripts/common/juicer_tools.jar"
-DL_DIR="/mnt/storage_3/home/b.hofman/pl0457-01/project_data/pekowska_lab_software/DeepLoop"
+JUICER_JAR="/PATH_TO_JUICER/" # juicer/scripts/common/juicer_tools.jar
+DL_DIR="/PATH_TO_DEEPLOOP/" # DeepLoop/
 MODEL_H5="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
 MODEL_JSON="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.json"
 
 # Paths to python scripts
-SCRIPT_PROCESS_JUICER="/mnt/storage_3/home/b.hofman/pl0457-01/scratch/SD071125_XXXXXXH/deep_loop_pipeline/scripts/process_juicer_output.py"
-SCRIPT_TO_BEDPE="/mnt/storage_3/home/b.hofman/pl0457-01/scratch/SD071125_XXXXXXH/deep_loop_pipeline/scripts/deeploop_to_bedpe.py"
+SCRIPT_PROCESS_JUICER="scripts/process_juicer_output.py"
+SCRIPT_TO_BEDPE="scripts/deeploop_to_bedpe.py"
 
 # Filtration parameters for final detected loops
-FIXED_MIN_DIST=5        # minimum distance in bins (e.g. 5 bins from diagonal)
+FIXED_MIN_DIST=5         # minimum distance in bins (e.g. 5 bins from diagonal, where 1 bin = resolution in base pairs)
 FIXED_PERCENTILE=98.0    # Percentile (e.g. 98.0 means that we take top 2% of the strongest signals)
 
 # Create a directory structure 
@@ -73,17 +73,15 @@ PREFIX="$OUT_DIR/raw_dumps/${CHROM}_${RES}"
 DL_INPUT="$OUT_DIR/deeploop_in/${CHROM}_${RES}_input.txt"
 
 echo "=========================================================="
-echo "START PIPELINE: $CHROM @ $RES bp"
+echo "START PIPELINE: $CHROM at $RES resolution in bp"
 echo "Output Directory: $OUT_DIR"
 echo "Params: MinDist=${FIXED_MIN_DIST}, Percentile=${FIXED_PERCENTILE}%"
 echo "=========================================================="
-
 
 # Juicer Dump the observed and observed/expected values after KR normalization
 echo "[1/4] Dumping data from juicer..."
 java -jar "$JUICER_JAR" dump observed KR "$HIC_FILE" "$CHROM" "$CHROM" BP "$RES" "${PREFIX}_obs.txt"
 java -jar "$JUICER_JAR" dump oe KR "$HIC_FILE" "$CHROM" "$CHROM" BP "$RES" "${PREFIX}_oe.txt"
-
 
 # Processing juicer dump output
 echo "[2/4] Processing juicer output for DeepLoop..."
