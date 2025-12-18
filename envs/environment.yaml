@@ -1,4 +1,4 @@
-name: deeploop-keras
+name: juicer-to-deeploop
 channels:
   - conda-forge
   - defaults
