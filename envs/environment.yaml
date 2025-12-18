@@ -1,0 +1,17 @@
+name: deeploop-keras
+channels:
+  - conda-forge
+  - defaults
+  - bioconda
+dependencies:
+
+  - python=3.7
+  - pip
+  - openjdk  
+  - parallel
+  - make
+  - java-jdk
+  - gcc
+  - coreutils
+  - pigz
+  - curl

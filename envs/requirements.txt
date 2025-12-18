@@ -1,0 +1,12 @@
+numpy
+scipy
+pandas
+tqdm
+matplotlib
+opencv-python
+tensorflow==2.3.1
+snakemake
+pulp
+tensorflow
+keras
+scikit-learn
