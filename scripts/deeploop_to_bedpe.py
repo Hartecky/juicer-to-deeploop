@@ -5,7 +5,7 @@ import os
 import argparse
 from sklearn.cluster import DBSCAN
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(description="Convert DeepLoop output to BEDPE using DBSCAN clustering.")
     parser.add_argument("--input", required=True, help="Path to DeepLoop output file")
     parser.add_argument("--out", required=True, help="Output BEDPE filename")
@@ -20,6 +20,12 @@ def main():
 
     args = parser.parse_args()
 
+    return(args)
+
+def main():
+
+    args = parse_args()
+    
     # Logika
     print(f"--- DeepLoop DBSCAN: {args.chrom} @ {args.res}bp ---")
     

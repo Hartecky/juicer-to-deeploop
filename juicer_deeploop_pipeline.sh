@@ -7,13 +7,15 @@ usage() {
     echo "Multiscale Pipeline for Chromatin Loop Detection (DeepLoop + DBSCAN)."
     echo ""
     echo "Required Arguments:"
-    echo "  -i, --input <FILE>    Path to input .hic file"
-    echo "  -c, --chrom <STR>     Chromosome name (e.g., chr1)"
-    echo "  -r, --res <LIST>      Comma-separated resolutions (e.g., 2000,5000,10000)"
-    echo "  -o, --out <DIR>       Output directory path"
+    echo "  -i,     --input     <FILE>    Path to input .hic file"
+    echo "  -c,     --chrom     <STR>     Chromosome name (e.g., chr1)"
+    echo "  -r,     --res       <LIST>    Comma-separated resolutions (e.g., 2000,5000,10000)"
+    echo "  -m,     --min-dist  <INT>     Number of minimum distance in bins from the diagonal (default: 3)"
+    echo "  -p,     --perc      <FLOAT>   Percentage of the top strongest signals from neural network (default 97.0)"
+    echo "  -o,     --out       <DIR>       Output directory path"
     echo ""
     echo "Example:"
-    echo "  $0 --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1"
+    echo "  $0 --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1 -m 3 -p 97.0"
     echo ""
 }
 
@@ -22,12 +24,16 @@ HIC_FILE=""
 CHROM=""
 RES_STRING="" # String np "2000,5000"
 OUT_DIR=""
+MIN_DIST=""
+PERC=""
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -i|--input) HIC_FILE="$2"; shift ;;
         -c|--chrom) CHROM="$2"; shift ;;
         -r|--res) RES_STRING="$2"; shift ;;
+        -m|--min-dist) OUT_DIR="$2"; shift ;;
+        -p|--perc) OUT_DIR="$2"; shift ;;
         -o|--out) OUT_DIR="$2"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
@@ -35,7 +41,7 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES_STRING" ] || [ -z "$OUT_DIR" ]; then
+if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES_STRING" ] || [ -z "$OUT_DIR" ] || [ -z "$MID_DIST" ] || [ -z "$PERC" ]; then
     echo "Error: Missing arguments."
     usage
     exit 1
@@ -43,7 +49,7 @@ fi
 
 # Configs (Update Paths!)
 # UWAGA: Upewnij się, że te ścieżki są poprawne w Twoim systemie!
-JUICER_JAR="/mnt/storage_6/project_data/pl0457-01/pekowska_lab_software/juicer/scripts/common/juicer_tools.jar"
+JUICER_JAR="~/juicer/scripts/common/juicer_tools.jar"
 DL_DIR="/mnt/storage_3/home/b.hofman/pl0457-01/project_data/pekowska_lab_software/DeepLoop"
 MODEL_H5="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
 MODEL_JSON="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.json"
@@ -86,8 +92,8 @@ for RES in "${RES_ARRAY[@]}"; do
         # Dla 10k i wyżej (np. 10000 bp):
         # - Obniżamy threshold do 0.85 (DeepLoop jest mniej pewny na dużej skali)
         # - Zmniejszamy min-dist do 3 binów (30kb), bo 5 binów (50kb) wycięłoby za dużo
-        CURRENT_THRESHOLD=0.85
-        CURRENT_MIN_DIST=3
+        #CURRENT_THRESHOLD=0.85
+        #CURRENT_MIN_DIST=3
         CURRENT_EPS=2.5
         CURRENT_MIN_SAMPLES=3
         echo "   -> Setting HIGH SENSITIVITY for coarse resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
@@ -95,8 +101,8 @@ for RES in "${RES_ARRAY[@]}"; do
         # Dla 2k, 5k (wysoka rozdzielczość):
         # - Możemy być bardziej restrykcyjni (0.95), ale nadal bezpieczniej niż 0.97
         # - Min dystans 5 binów (przy 2k to 10kb, przy 5k to 25kb - ok)
-        CURRENT_THRESHOLD=0.95
-        CURRENT_MIN_DIST=5
+        #CURRENT_THRESHOLD=0.95
+        #CURRENT_MIN_DIST=5
         CURRENT_EPS=3.0
         CURRENT_MIN_SAMPLES=3
         echo "   -> Setting STANDARD SENSITIVITY for high resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
@@ -161,8 +167,8 @@ for RES in "${RES_ARRAY[@]}"; do
         --out "$BEDPE_OUTPUT" \
         --chrom "$CHROM" \
         --res "$RES" \
-        --min-dist "$CURRENT_MIN_DIST" \
-        --threshold "$CURRENT_THRESHOLD" \
+        --min-dist "$MIN_DIST" \
+        --threshold "$PERC" \
         --eps "$CURRENT_EPS" \
         --min-samples "$CURRENT_MIN_SAMPLES"
 
