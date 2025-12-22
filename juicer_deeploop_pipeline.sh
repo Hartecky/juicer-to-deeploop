@@ -42,14 +42,15 @@ if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES_STRING" ] || [ -z "$OUT_D
 fi
 
 # Configs (Update Paths!)
+# UWAGA: Upewnij się, że te ścieżki są poprawne w Twoim systemie!
 JUICER_JAR="/mnt/storage_6/project_data/pl0457-01/pekowska_lab_software/juicer/scripts/common/juicer_tools.jar"
 DL_DIR="/mnt/storage_3/home/b.hofman/pl0457-01/project_data/pekowska_lab_software/DeepLoop"
 MODEL_H5="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
 MODEL_JSON="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.json"
 
 SCRIPT_PROCESS="scripts/process_juicer_output.py"
-SCRIPT_DBSCAN="scripts/deeploop_to_bedpe.py" # NOWY SKRYPT
-SCRIPT_MERGE="scripts/merge_loops.py" # NOWY SKRYPT
+SCRIPT_DBSCAN="scripts/deeploop_to_bedpe.py" 
+SCRIPT_MERGE="scripts/merge_loops.py" 
 
 # Create directories
 mkdir -p "$OUT_DIR/raw_dumps"
@@ -68,15 +69,38 @@ IFS=',' read -ra RES_ARRAY <<< "$RES_STRING"
 FILES_TO_MERGE=()
 RES_TO_MERGE=()
 
-# Iterate over three resolutions
+# Iterate over resolutions
 for RES in "${RES_ARRAY[@]}"; do
     echo ""
     echo ">>> Processing resolution: $RES bp"
     
     PREFIX="$OUT_DIR/raw_dumps/${CHROM}_${RES}"
     DL_INPUT="$OUT_DIR/deeploop_in/${CHROM}_${RES}_input.txt"
-    DL_OUTPUT="$OUT_DIR/deeploop_out/${CHROM}_${RES}.denoised.anchor.to.anchor" # Dodalem RES do nazwy
+    DL_OUTPUT="$OUT_DIR/deeploop_out/${CHROM}_${RES}.denoised.anchor.to.anchor" 
     BEDPE_OUTPUT="$OUT_DIR/final_bedpe/${CHROM}_${RES}_loops.bedpe"
+
+    # --- 1. CONFIGURATION OF SENSITIVITY ---
+    # Tutaj dobieramy parametry w zależności od rozdzielczości, żeby zwiększyć liczbę pętli na 10k
+    
+    if [ "$RES" -ge 10000 ]; then
+        # Dla 10k i wyżej (np. 10000 bp):
+        # - Obniżamy threshold do 0.85 (DeepLoop jest mniej pewny na dużej skali)
+        # - Zmniejszamy min-dist do 3 binów (30kb), bo 5 binów (50kb) wycięłoby za dużo
+        CURRENT_THRESHOLD=0.85
+        CURRENT_MIN_DIST=3
+        CURRENT_EPS=2.5
+        CURRENT_MIN_SAMPLES=3
+        echo "   -> Setting HIGH SENSITIVITY for coarse resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
+    else
+        # Dla 2k, 5k (wysoka rozdzielczość):
+        # - Możemy być bardziej restrykcyjni (0.95), ale nadal bezpieczniej niż 0.97
+        # - Min dystans 5 binów (przy 2k to 10kb, przy 5k to 25kb - ok)
+        CURRENT_THRESHOLD=0.95
+        CURRENT_MIN_DIST=5
+        CURRENT_EPS=3.0
+        CURRENT_MIN_SAMPLES=3
+        echo "   -> Setting STANDARD SENSITIVITY for high resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
+    fi
 
     # 1. Juicer Dump
     echo "[1/4] Dumping data..."
@@ -97,50 +121,50 @@ for RES in "${RES_ARRAY[@]}"; do
         --out "$DL_INPUT" \
         --anchor-dir "$OUT_DIR/anchors"
 
-    # 3. DeepLoop (Warning: DeepLoop output filename is tricky to control)
+    # 3. DeepLoop
     echo "[3/4] Running DeepLoop..."
     export CUDA_VISIBLE_DEVICES=""
     
-    # DeepLoop zawsze zapisuje jako {CHROM}.denoised.anchor.to.anchor w out_dir
-    # Żeby nie nadpisywać plików przy różnych rozdzielczościach, zrobimy trick z podkatalogiem
     RES_OUT_DIR="$OUT_DIR/deeploop_out/$RES"
     mkdir -p "$RES_OUT_DIR"
 
-    python "$DL_DIR/prediction/predict_chromosome.py" \
-      --full_matrix_dir "$OUT_DIR/deeploop_in" \
-      --input_name "$(basename $DL_INPUT)" \
-      --out_dir "$RES_OUT_DIR" \
-      --anchor_dir "$OUT_DIR/anchors" \
-      --h5_file "$MODEL_H5" \
-      --json_file "$MODEL_JSON" \
-      --chromosome "$CHROM" \
-      --val_cols obs exp \
-      --small_matrix_size 128 \
-      --step_size 64 \
-      --dummy 5 > /dev/null
+    # Jeśli plik wynikowy już istnieje, pomijamy obliczenia DeepLoop (oszczędność czasu)
+    if [ ! -f "$DL_OUTPUT" ]; then
+        python "$DL_DIR/prediction/predict_chromosome.py" \
+          --full_matrix_dir "$OUT_DIR/deeploop_in" \
+          --input_name "$(basename $DL_INPUT)" \
+          --out_dir "$RES_OUT_DIR" \
+          --anchor_dir "$OUT_DIR/anchors" \
+          --h5_file "$MODEL_H5" \
+          --json_file "$MODEL_JSON" \
+          --chromosome "$CHROM" \
+          --val_cols obs exp \
+          --small_matrix_size 128 \
+          --step_size 64 \
+          --dummy 5 > /dev/null
 
-    # Przenosimy wynik do głównego folderu ze zmienioną nazwą
-    mv "$RES_OUT_DIR/${CHROM}.denoised.anchor.to.anchor" "$DL_OUTPUT"
+        mv "$RES_OUT_DIR/${CHROM}.denoised.anchor.to.anchor" "$DL_OUTPUT"
+    else
+        echo "   -> DeepLoop output exists, skipping prediction."
+    fi
     
     if [ ! -f "$DL_OUTPUT" ]; then
         echo "ERROR: DeepLoop failed for $RES."
         exit 1
     fi
 
-    # 4. Convert to BEDPE using DBSCAN
+    # 4. Convert to BEDPE using DBSCAN (with dynamic parameters)
     echo "[4/4] Clustering (DBSCAN) -> BEDPE..."
     
-    # Parametry zależne od rozdzielczości (opcjonalnie można sterować)
-    # Dla 2k/5k/10k stałe eps=2.5 bina zazwyczaj działa dobrze
     python "$SCRIPT_DBSCAN" \
         --input "$DL_OUTPUT" \
         --out "$BEDPE_OUTPUT" \
         --chrom "$CHROM" \
         --res "$RES" \
-        --min-dist 5 \
-        --threshold 0.97 \
-        --eps 2.5 \
-        --min-samples 3
+        --min-dist "$CURRENT_MIN_DIST" \
+        --threshold "$CURRENT_THRESHOLD" \
+        --eps "$CURRENT_EPS" \
+        --min-samples "$CURRENT_MIN_SAMPLES"
 
     # Add to list for merging
     if [ -f "$BEDPE_OUTPUT" ]; then
@@ -150,7 +174,10 @@ for RES in "${RES_ARRAY[@]}"; do
 
 done
 
+echo ""
+echo "========================================="
 echo "MERGING MULTISCALE RESULTS"
+echo "========================================="
 
 FINAL_MERGED="$OUT_DIR/final_bedpe/${CHROM}_merged_multires.bedpe"
 
