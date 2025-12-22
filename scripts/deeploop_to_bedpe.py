@@ -3,77 +3,101 @@ import numpy as np
 import sys
 import os
 import argparse
+from sklearn.cluster import DBSCAN
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert DeepLoop output to BEDPE format (Percentile only).")
-    
+    parser = argparse.ArgumentParser(description="Convert DeepLoop output to BEDPE using DBSCAN clustering.")
     parser.add_argument("--input", required=True, help="Path to DeepLoop output file")
     parser.add_argument("--out", required=True, help="Output BEDPE filename")
     parser.add_argument("--chrom", required=True, help="Chromosome name")
     parser.add_argument("--res", type=int, required=True, help="Resolution in BP")
     
-    # Default parameters
+    # Parametry
     parser.add_argument("--min-dist", type=int, default=5, help="Min distance in bins (Default: 5)")
-    parser.add_argument("--percentile", type=float, default=98.0, help="Percentile (Default: 98.0)")
+    parser.add_argument("--threshold", type=float, default=0.97, help="Score threshold for DBSCAN input (Default: 0.97)")
+    parser.add_argument("--eps", type=float, default=2.5, help="DBSCAN eps (in bins). Default: 2.5")
+    parser.add_argument("--min-samples", type=int, default=3, help="DBSCAN min_samples. Default: 3")
 
     args = parser.parse_args()
 
-    # Capture variables from argparse
-    INPUT_FILE = args.input
-    OUTPUT_FILE = args.out
-    CHROM = args.chrom
-    RES = args.res
-    MIN_BIN_DIST = args.min_dist
-    PERCENTILE = args.percentile
-
-    print(f"DeepLoop -> BEDPE: {CHROM} @ {RES}bp")
-    print(f"Strategy: Percentile ({PERCENTILE}%) | MinBinDist={MIN_BIN_DIST}")
+    # Logika
+    print(f"--- DeepLoop DBSCAN: {args.chrom} @ {args.res}bp ---")
+    
+    if not os.path.exists(args.input):
+        print(f"Error: Missing file {args.input}")
+        sys.exit(1)
 
     try:
-        if not os.path.exists(INPUT_FILE):
-            raise FileNotFoundError(f"Missing file: {INPUT_FILE}")
-        
-        df = pd.read_csv(INPUT_FILE, sep=r'\s+', header=None, names=['idx1', 'idx2', 'score'])
+        df = pd.read_csv(args.input, sep=r'\s+', header=None, names=['idx1', 'idx2', 'score'])
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
 
-    # Filter by distance
+    # 1. Filtrowanie wstępne
     df['dist'] = df['idx2'] - df['idx1']
-    df_dist = df[df['dist'] >= MIN_BIN_DIST].copy()
-    
-    if df_dist.empty:
-        print("No loops found after distance filtering.")
+    # Usuwamy przekątną
+    df = df[df['dist'] >= args.min_dist]
+    # Usuwamy szum poniżej progu (DBSCAN potrzebuje tylko silnych punktów)
+    df = df[df['score'] >= args.threshold].copy()
+
+    if df.empty:
+        print("No loops found after filtering.")
+        # Pusty plik
         header = ["#chr1", "x1", "x2", "chr2", "y1", "y2", "name", "score", "color"]
-        pd.DataFrame(columns=header).to_csv(OUTPUT_FILE, sep='\t', index=False)
+        pd.DataFrame(columns=header).to_csv(args.out, sep='\t', index=False)
         sys.exit(0)
 
-    # Calculate the threshold by provided percentile 
-    threshold = np.percentile(df_dist['score'], PERCENTILE)
+    # 2. DBSCAN
+    print(f"Running DBSCAN on {len(df)} points...")
+    coords = df[['idx1', 'idx2']].values
     
-    print(f"Calculated Threshold (Top {100-PERCENTILE:.1f}%): {threshold:.5f}")
-
-    # Filter out loops by calculated threshold
-    loops = df_dist[df_dist['score'] >= threshold].copy()
-    print(f"Loops found: {len(loops)}")
-
-    # Convert into coordinates
-    loops['chr1'] = CHROM
-    loops['x1'] = loops['idx1'] * RES
-    loops['x2'] = loops['x1'] + RES 
-    loops['chr2'] = CHROM
-    loops['y1'] = loops['idx2'] * RES
-    loops['y2'] = loops['y1'] + RES
+    # eps=2.5 oznacza, że punkty odległe o max 2.5 bina są łączone
+    db = DBSCAN(eps=args.eps, min_samples=args.min_samples).fit(coords)
     
-    loops['name'] = '.' 
-    loops['score_out'] = loops['score'].round(5)
-    loops['color'] = '0,0,0' 
+    df['cluster'] = db.labels_
 
-    bedpe_cols = ['chr1', 'x1', 'x2', 'chr2', 'y1', 'y2', 'name', 'score_out', 'color']
+    # Odrzucamy szum (-1)
+    clustered = df[df['cluster'] != -1]
+    
+    unique_clusters = clustered['cluster'].nunique()
+    print(f"Found {unique_clusters} loops (clusters).")
+
+    if unique_clusters == 0:
+        # Pusty plik jeśli same szumy
+        header = ["#chr1", "x1", "x2", "chr2", "y1", "y2", "name", "score", "color"]
+        pd.DataFrame(columns=header).to_csv(args.out, sep='\t', index=False)
+        sys.exit(0)
+
+    # 3. Obliczanie Centroidów
+    loops_data = []
+    for cid, group in clustered.groupby('cluster'):
+        # Środek ciężkości
+        c_idx1 = int(group['idx1'].mean())
+        c_idx2 = int(group['idx2'].mean())
+        # Max score w grupie
+        c_score = group['score'].max()
+        
+        loops_data.append([c_idx1, c_idx2, c_score])
+
+    final_df = pd.DataFrame(loops_data, columns=['idx1', 'idx2', 'score'])
+
+    # 4. Konwersja na koordynaty
+    final_df['chr1'] = args.chrom
+    final_df['x1'] = final_df['idx1'] * args.res
+    final_df['x2'] = final_df['x1'] + args.res 
+    final_df['chr2'] = args.chrom
+    final_df['y1'] = final_df['idx2'] * args.res
+    final_df['y2'] = final_df['y1'] + args.res
+    
+    final_df['name'] = '.' 
+    final_df['score_out'] = final_df['score'].round(5)
+    final_df['color'] = '0,0,0' 
+
+    cols = ['chr1', 'x1', 'x2', 'chr2', 'y1', 'y2', 'name', 'score_out', 'color']
     header = ["#chr1", "x1", "x2", "chr2", "y1", "y2", "name", "score", "color"]
     
-    loops[bedpe_cols].to_csv(OUTPUT_FILE, sep='\t', index=False, header=header)
-    print(f"Saved: {OUTPUT_FILE}")
+    final_df[cols].to_csv(args.out, sep='\t', index=False, header=header)
+    print(f"Saved: {args.out}")
 
 if __name__ == "__main__":
     main()
