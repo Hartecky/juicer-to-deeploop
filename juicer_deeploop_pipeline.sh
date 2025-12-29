@@ -79,27 +79,26 @@ for RES in "${RES_ARRAY[@]}"; do
     DL_OUTPUT="$OUT_DIR/deeploop_out/${CHROM}_${RES}.denoised.anchor.to.anchor" 
     BEDPE_OUTPUT="$OUT_DIR/final_bedpe/${CHROM}_${RES}_loops.bedpe"
 
-    # --- 1. CONFIGURATION OF SENSITIVITY ---
-    # Tutaj dobieramy parametry w zależności od rozdzielczości, żeby zwiększyć liczbę pętli na 10k
-    
-    if [ "$RES" -ge 10000 ]; then
-        # Dla 10k i wyżej (np. 10000 bp):
-        # - Obniżamy threshold do 0.85 (DeepLoop jest mniej pewny na dużej skali)
-        # - Zmniejszamy min-dist do 3 binów (30kb), bo 5 binów (50kb) wycięłoby za dużo
-        CURRENT_THRESHOLD=0.85
+    # CONFIGURATION OF SENSITIVITY
+
+    if (( RES == 10000 )); then
+        CURRENT_THRESHOLD=0.8
         CURRENT_MIN_DIST=3
         CURRENT_EPS=2.5
-        CURRENT_MIN_SAMPLES=3
-        echo "   -> Setting HIGH SENSITIVITY for coarse resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
-    else
-        # Dla 2k, 5k (wysoka rozdzielczość):
-        # - Możemy być bardziej restrykcyjni (0.95), ale nadal bezpieczniej niż 0.97
-        # - Min dystans 5 binów (przy 2k to 10kb, przy 5k to 25kb - ok)
-        CURRENT_THRESHOLD=0.95
-        CURRENT_MIN_DIST=5
+        CURRENT_MIN_SAMPLES=2
+    elif (( RES == 5000 )); then
+        CURRENT_THRESHOLD=0.9
+        CURRENT_MIN_DIST=4
         CURRENT_EPS=3.0
         CURRENT_MIN_SAMPLES=3
-        echo "   -> Setting STANDARD SENSITIVITY for high resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
+    elif (( RES == 2000 )); then
+        CURRENT_THRESHOLD=0.95
+        CURRENT_MIN_DIST=10
+        CURRENT_EPS=3.0
+        CURRENT_MIN_SAMPLES=3
+    else
+        echo "Unsupported resolution: RES=$RES" >&2
+        exit 1
     fi
 
     # 1. Juicer Dump
@@ -175,9 +174,7 @@ for RES in "${RES_ARRAY[@]}"; do
 done
 
 echo ""
-echo "========================================="
 echo "MERGING MULTISCALE RESULTS"
-echo "========================================="
 
 FINAL_MERGED="$OUT_DIR/final_bedpe/${CHROM}_merged_multires.bedpe"
 
