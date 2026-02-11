@@ -4,7 +4,7 @@
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Multiscale Pipeline for Chromatin Loop Detection (DeepLoop + DBSCAN)."
+    echo "Bridge between juicers workflow .hic output data to calling loops through DeepLoop algorithm followed by DBSCAN clustering to extract loops from patterns."
     echo ""
     echo "Required Arguments:"
     echo "  -i,     --input     <FILE>    Path to input .hic file"
@@ -12,7 +12,7 @@ usage() {
     echo "  -r,     --res       <LIST>    Comma-separated resolutions (e.g., 2000,5000,10000)"
     echo "  -m,     --min-dist  <INT>     Number of minimum distance in bins from the diagonal (default: 3)"
     echo "  -p,     --perc      <FLOAT>   Percentage of the top strongest signals from neural network (default 97.0)"
-    echo "  -o,     --out       <DIR>       Output directory path"
+    echo "  -o,     --out       <DIR>     Output directory path"
     echo ""
     echo "Example:"
     echo "  $0 --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1 -m 3 -p 97.0"
@@ -22,7 +22,7 @@ usage() {
 # Parse Arguments
 HIC_FILE=""
 CHROM=""
-RES_STRING="" # String np "2000,5000"
+RES_STRING="" 
 OUT_DIR=""
 MIN_DIST=""
 PERC=""
@@ -47,8 +47,7 @@ if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES_STRING" ] || [ -z "$OUT_D
     exit 1
 fi
 
-# Configs (Update Paths!)
-# UWAGA: Upewnij się, że te ścieżki są poprawne w Twoim systemie!
+# Configs
 JUICER_JAR="~/juicer/scripts/common/juicer_tools.jar"
 DL_DIR="/mnt/storage_3/home/b.hofman/pl0457-01/project_data/pekowska_lab_software/DeepLoop"
 MODEL_H5="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
@@ -85,30 +84,17 @@ for RES in "${RES_ARRAY[@]}"; do
     DL_OUTPUT="$OUT_DIR/deeploop_out/${CHROM}_${RES}.denoised.anchor.to.anchor" 
     BEDPE_OUTPUT="$OUT_DIR/final_bedpe/${CHROM}_${RES}_loops.bedpe"
 
-    # --- 1. CONFIGURATION OF SENSITIVITY ---
-    # Tutaj dobieramy parametry w zależności od rozdzielczości, żeby zwiększyć liczbę pętli na 10k
-    
+    # Sensitivity configuration
     if [ "$RES" -ge 10000 ]; then
-        # Dla 10k i wyżej (np. 10000 bp):
-        # - Obniżamy threshold do 0.85 (DeepLoop jest mniej pewny na dużej skali)
-        # - Zmniejszamy min-dist do 3 binów (30kb), bo 5 binów (50kb) wycięłoby za dużo
-        #CURRENT_THRESHOLD=0.85
-        #CURRENT_MIN_DIST=3
         CURRENT_EPS=2.5
         CURRENT_MIN_SAMPLES=3
         echo "   -> Setting HIGH SENSITIVITY for coarse resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
     else
-        # Dla 2k, 5k (wysoka rozdzielczość):
-        # - Możemy być bardziej restrykcyjni (0.95), ale nadal bezpieczniej niż 0.97
-        # - Min dystans 5 binów (przy 2k to 10kb, przy 5k to 25kb - ok)
-        #CURRENT_THRESHOLD=0.95
-        #CURRENT_MIN_DIST=5
         CURRENT_EPS=3.0
         CURRENT_MIN_SAMPLES=3
         echo "   -> Setting STANDARD SENSITIVITY for high resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
     fi
 
-    # 1. Juicer Dump
     echo "[1/4] Dumping data..."
     if [ ! -f "${PREFIX}_obs.txt" ]; then
         java -jar "$JUICER_JAR" dump observed KR "$HIC_FILE" "$CHROM" "$CHROM" BP "$RES" "${PREFIX}_obs.txt"

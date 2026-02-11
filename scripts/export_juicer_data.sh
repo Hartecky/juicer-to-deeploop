@@ -18,7 +18,7 @@ usage() {
     echo "  -h, --help              Show this help message and exit"
     echo ""
     echo "Example:"
-    echo "  $0 --input ../aligned/inter_30.hic --chrom chr1 --res 10000 --out-prefix results/chr1_data"
+    echo "  $0 --input inter_30.hic --chrom chr1 --res 10000 --out-prefix results/chr1_data"
     echo ""
 }
 
