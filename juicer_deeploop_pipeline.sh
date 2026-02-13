@@ -4,36 +4,30 @@
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Bridge between juicers workflow .hic output data to calling loops through DeepLoop algorithm followed by DBSCAN clustering to extract loops from patterns."
+    echo "Multiscale Pipeline for Chromatin Loop Detection (DeepLoop + DBSCAN)."
     echo ""
     echo "Required Arguments:"
-    echo "  -i,     --input     <FILE>    Path to input .hic file"
-    echo "  -c,     --chrom     <STR>     Chromosome name (e.g., chr1)"
-    echo "  -r,     --res       <LIST>    Comma-separated resolutions (e.g., 2000,5000,10000)"
-    echo "  -m,     --min-dist  <INT>     Number of minimum distance in bins from the diagonal (default: 3)"
-    echo "  -p,     --perc      <FLOAT>   Percentage of the top strongest signals from neural network (default 97.0)"
-    echo "  -o,     --out       <DIR>     Output directory path"
+    echo "  -i, --input <FILE>    Path to input .hic file"
+    echo "  -c, --chrom <STR>     Chromosome name (e.g., chr1)"
+    echo "  -r, --res <LIST>      Comma-separated resolutions (e.g., 2000,5000,10000)"
+    echo "  -o, --out <DIR>       Output directory path"
     echo ""
     echo "Example:"
-    echo "  $0 --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1 -m 3 -p 97.0"
+    echo "  $0 --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1"
     echo ""
 }
 
 # Parse Arguments
 HIC_FILE=""
 CHROM=""
-RES_STRING="" 
+RES_STRING="" # String np "2000,5000"
 OUT_DIR=""
-MIN_DIST=""
-PERC=""
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -i|--input) HIC_FILE="$2"; shift ;;
         -c|--chrom) CHROM="$2"; shift ;;
         -r|--res) RES_STRING="$2"; shift ;;
-        -m|--min-dist) OUT_DIR="$2"; shift ;;
-        -p|--perc) OUT_DIR="$2"; shift ;;
         -o|--out) OUT_DIR="$2"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
@@ -41,15 +35,16 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES_STRING" ] || [ -z "$OUT_DIR" ] || [ -z "$MID_DIST" ] || [ -z "$PERC" ]; then
+if [ -z "$HIC_FILE" ] || [ -z "$CHROM" ] || [ -z "$RES_STRING" ] || [ -z "$OUT_DIR" ]; then
     echo "Error: Missing arguments."
     usage
     exit 1
 fi
 
-# Configs
-JUICER_JAR="~/juicer/scripts/common/juicer_tools.jar"
-DL_DIR="/mnt/storage_3/home/b.hofman/pl0457-01/project_data/pekowska_lab_software/DeepLoop"
+# Configs (Update Paths!)
+# UWAGA: Upewnij się, że te ścieżki są poprawne w Twoim systemie!
+JUICER_JAR="$HOME/juicer/scripts/common/juicer_tools.jar"
+DL_DIR="$HOME/DeepLoop"
 MODEL_H5="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
 MODEL_JSON="$DL_DIR/DeepLoop_models/CPGZ_trained/LoopDenoise.json"
 
@@ -77,24 +72,51 @@ RES_TO_MERGE=()
 # Iterate over resolutions
 for RES in "${RES_ARRAY[@]}"; do
     echo ""
-    echo ">>> Processing resolution: $RES bp"
+    echo "Processing resolution: $RES bp"
     
     PREFIX="$OUT_DIR/raw_dumps/${CHROM}_${RES}"
     DL_INPUT="$OUT_DIR/deeploop_in/${CHROM}_${RES}_input.txt"
     DL_OUTPUT="$OUT_DIR/deeploop_out/${CHROM}_${RES}.denoised.anchor.to.anchor" 
     BEDPE_OUTPUT="$OUT_DIR/final_bedpe/${CHROM}_${RES}_loops.bedpe"
 
-    # Sensitivity configuration
-    if [ "$RES" -ge 10000 ]; then
+    # CONFIGURATION OF SENSITIVITY
+
+    if (( RES == 25000 )); then
+        CURRENT_THRESHOLD=0.70
+        CURRENT_MIN_DIST=5
         CURRENT_EPS=2.5
-        CURRENT_MIN_SAMPLES=3
-        echo "   -> Setting HIGH SENSITIVITY for coarse resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
-    else
+        CURRENT_MIN_SAMPLES=2
+    elif (( RES == 10000 )); then
+        CURRENT_THRESHOLD=0.70
+        CURRENT_MIN_DIST=5
+        CURRENT_EPS=2.5
+        CURRENT_MIN_SAMPLES=2
+    elif (( RES == 5000 )); then
+        CURRENT_THRESHOLD=0.80
+        CURRENT_MIN_DIST=4
         CURRENT_EPS=3.0
-        CURRENT_MIN_SAMPLES=3
-        echo "   -> Setting STANDARD SENSITIVITY for high resolution (Thresh=$CURRENT_THRESHOLD, MinDist=$CURRENT_MIN_DIST)"
+        CURRENT_MIN_SAMPLES=2
+    elif (( RES == 2000 )); then
+        CURRENT_THRESHOLD=0.90
+        CURRENT_MIN_DIST=3
+        CURRENT_EPS=3.5
+        CURRENT_MIN_SAMPLES=2
+    elif (( RES == 1000 )); then
+        CURRENT_THRESHOLD=0.90
+        CURRENT_MIN_DIST=3
+        CURRENT_EPS=3.5
+        CURRENT_MIN_SAMPLES=2
+    elif (( RES == 500 )); then
+        CURRENT_THRESHOLD=0.90
+        CURRENT_MIN_DIST=3
+        CURRENT_EPS=3.5
+        CURRENT_MIN_SAMPLES=2
+    else
+        echo "Unsupported resolution: RES=$RES" >&2
+        exit 1
     fi
 
+    # 1. Juicer Dump
     echo "[1/4] Dumping data..."
     if [ ! -f "${PREFIX}_obs.txt" ]; then
         java -jar "$JUICER_JAR" dump observed KR "$HIC_FILE" "$CHROM" "$CHROM" BP "$RES" "${PREFIX}_obs.txt"
@@ -153,8 +175,8 @@ for RES in "${RES_ARRAY[@]}"; do
         --out "$BEDPE_OUTPUT" \
         --chrom "$CHROM" \
         --res "$RES" \
-        --min-dist "$MIN_DIST" \
-        --threshold "$PERC" \
+        --min-dist "$CURRENT_MIN_DIST" \
+        --threshold "$CURRENT_THRESHOLD" \
         --eps "$CURRENT_EPS" \
         --min-samples "$CURRENT_MIN_SAMPLES"
 
@@ -167,9 +189,7 @@ for RES in "${RES_ARRAY[@]}"; do
 done
 
 echo ""
-echo "========================================="
 echo "MERGING MULTISCALE RESULTS"
-echo "========================================="
 
 FINAL_MERGED="$OUT_DIR/final_bedpe/${CHROM}_merged_multires.bedpe"
 
