@@ -117,3 +117,12 @@ The pipeline creates the following directory structure in your output folder:
   -  deeploop_in/: Input text files prepared for DeepLoop.
   -  raw_dumps/: Raw Observed and OE matrices dumped from Juicer.
   -  anchors/: Genomic coordinates (BED files) used for mapping bins.
+
+## TODO
+
+### Additional steps which I would like to improve in this side-project is:
+
+- General code refactor to make it more clean and readable
+- Benchmark time execution for deep sequencing data
+- More work on evaluation different options for DeepLoop thresholding followed by adjusting parameters for DBSCAN
+- Include mode for genome-wide loop calling followed by DBSCAN
