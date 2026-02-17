@@ -77,7 +77,7 @@ def main():
     final_df.sort_values(by=['anchor1', 'anchor2'], inplace=True)
 
     print(f"Saving processed interaction file to: {OUTPUT_FILE}")
-    final_df.to_csv(OUTPUT_FILE, sep='\t', index=False)
+    final_df.to_csv(OUTPUT_FILE, sep='\t', index=False, header=False)
 
     # Generating BED reference
     print(f"Generating BED reference file in: {ANCHOR_DIR}...")

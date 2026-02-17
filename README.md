@@ -68,22 +68,35 @@ JUICER_JAR="/absolute/path/to/juicer_tools.jar"
 DL_DIR="/absolute/path/to/DeepLoop" 
 ```
 ### Optional tuning parameters
-Inside juicer_deeploop_pipeline.sh, you can also adjust the loop filtering thresholds:
+Inside juicer_deeploop_pipeline.sh, you can also adjust the loop filtering thresholds for multiple resolutions as well as DBSCAN parameters for clustering patterns into loops.
 
-  -  FIXED_MIN_DIST=5: Minimum distance in bins from the diagonal (removes local noise).
-  -  FIXED_PERCENTILE=98.0: Keeps only the top 2% of strongest signals detected by DeepLoop.
+Example for resolution 5000:
+
+  - CURRENT_THRESHOLD=0.80 - Keeps top 20% strongest signals
+  - CURRENT_MIN_DIST=4     - Minimum distance in bins from the diagonal (removes local noise)
+  - CURRENT_EPS=3.0        - radius parameter for DBSCAN
+  - CURRENT_MIN_SAMPLES=2  - points parameter for DBSCAN
 
 ## Usage
 
 Run the pipeline using the main bash script
 
 ```bash
-./juicer_deeploop_pipeline.sh -i <hic_file> -c <chrom> -r <resolution> -o <output_dir>
+./juicer_deeploop_pipeline.sh -i <hic_file> -c <chrom> -r <resolution> -n <norm> -o <output_dir>
 
-    -i, --input: Path to the .hic file (e.g., inter_30.hic)
-    -c, --chrom: Chromosome name (must match .hic internals, usually chr1, chr2)
-    -r, --res: Resolution in base pairs (e.g., 2000, 5000, 10000)
-    -o, --out: Output directory for results
+Usage: juicer_deeploop_pipeline.sh [OPTIONS]
+
+Multiscale Pipeline for Chromatin Loop Detection (DeepLoop + DBSCAN).
+
+Required Arguments:
+  -i, --input     <FILE>    Path to input .hic file
+  -c, --chrom     <STR>     Chromosome name (e.g., chr1)
+  -r, --res       <LIST>    Comma-separated resolutions (e.g., 2000,5000,10000)
+  -n  --norm      <STR>     Normalization type (one of KR, SCALE, VC, VC_SQRT, GW_SCALE, INTER_SCALE)
+  -o, --out       <DIR>     Output directory path
+
+Example:
+./juicer_deeploop_pipeline.sh --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1
 ```
 
 Example
@@ -92,6 +105,7 @@ Example
   --input data/GM12878.hic \
   --chrom chr1 \
   --res 5000 \
+  --norm KR \
   --out results/chr1_5k
 ```
 
@@ -103,3 +117,12 @@ The pipeline creates the following directory structure in your output folder:
   -  deeploop_in/: Input text files prepared for DeepLoop.
   -  raw_dumps/: Raw Observed and OE matrices dumped from Juicer.
   -  anchors/: Genomic coordinates (BED files) used for mapping bins.
+
+## TODO
+
+### Additional steps which I would like to improve in this side-project is:
+
+- General code refactor to make it more clean and readable
+- Benchmark time execution for deep sequencing data
+- More work on evaluation different options for DeepLoop thresholding followed by adjusting parameters for DBSCAN
+- Include mode for genome-wide loop calling followed by DBSCAN
