@@ -1,0 +1,13 @@
+# Paths to external tools - template
+# juicer_jar: "path/to/juicer_tools.jar"
+# deeploop_dir: "path/to/DeepLoop"
+# model_h5: "path/to/DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
+# model_json: "path/to/DeepLoop_models/CPGZ_trained/LoopDenoise.json"
+
+# Path to external tools
+juicer_jar: "/home/hartecky/juicer/CPU/common/juicer_tools.jar"
+deeploop_dir: "/home/hartecky/DeepLoop"
+
+# DeepLoop model (relative to deeploop_dir)
+model_h5: "DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
+model_json: "DeepLoop_models/CPGZ_trained/LoopDenoise.json"
