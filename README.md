@@ -1,128 +1,155 @@
 # juicer-to-deeploop
-Bridge between juicer's .hic output file to DeepLoop algorithm for peak detection from Hi-C data
 
-**juicer-to-deeploop** is a streamlined pipeline that automates the detection of chromatin loops from Hi-C data. It acts as a bridge between **Juicer Tools** (for data extraction) and **DeepLoop** (for deep learning based denoising), producing loop calls in `.bedpe` format compatible with Juicebox for visualization with actual .hic files from juicer pipeline.
+Bridge between Juicer's `.hic` output and the DeepLoop algorithm for chromatin loop detection from Hi-C data.
 
-# Pipeline Logic
-1. Juicer Dump: Extracts "Observed" (Raw) and "Observed/Expected" (OE) KR-normalized matrices from the .hic file.
-2. Pre-processing: Merges matrices, calculates expected values (required for DeepLoop), and handles padding to ensure DeepLoop doesn't crash on chromosome edges.
-3. DeepLoop: Runs the neural network to denoise the map and assign probabilities to pixels.
-4. Filtering: Converts the probability map to a list of loops, filtering out the diagonal (short-range artifacts) and applying a percentile threshold.
+**juicer-to-deeploop** is a streamlined pipeline that automates the detection of chromatin loops from Hi-C data. It acts as a bridge between **Juicer Tools** (for data extraction) and **DeepLoop** (for deep learning based denoising), producing loop calls in `.bedpe` format compatible with Juicebox for visualization.
+
+## Pipeline Logic
+
+1. **Juicer Dump** — Extracts Observed (raw) and OE (Observed/Expected) KR-normalized matrices from the `.hic` file.
+2. **Pre-processing** — Merges matrices, calculates expected values required by DeepLoop, and handles padding to prevent crashes on chromosome edges. Uses memory-efficient chunk-based processing suitable for high-resolution data.
+3. **DeepLoop** — Runs the neural network to denoise the contact map and assign loop probabilities to each pixel.
+4. **Filtering & Clustering** — Converts the probability map to a list of loops via DBSCAN clustering, filtering out diagonal artifacts and applying a score threshold.
+5. **Multiresolution Merge** — Merges loop calls across all resolutions using a kD-tree spatial index, collapsing redundant calls within a configurable tolerance window.
 
 ## Prerequisites
+
 Before running the pipeline, ensure you have the following installed:
 
-1. Juicer - developed by Aidenlab
+1. **Juicer Tools** — developed by Aidenlab
 
-   https://github.com/aidenlab/juicer/tree/main?tab=readme-ov-file
-   
-   Neva C. Durand, Muhammad S. Shamim, Ido Machol, Suhas S. P. Rao, Miriam H. Huntley, Eric S. Lander, and Erez Lieberman Aiden. "Juicer provides a one-click system for analyzing loop-resolution Hi-C experiments." Cell Systems 3(1), 2016
-   
-2. DeepLoop - developed by JinLab
+   https://github.com/aidenlab/juicer
+
+   Durand et al. "Juicer provides a one-click system for analyzing loop-resolution Hi-C experiments." *Cell Systems* 3(1), 2016.
+
+2. **DeepLoop** — developed by JinLab
 
    https://github.com/JinLabBioinfo/DeepLoop
 
-   Zhang, S., Plummer, D., Lu, L. et al. DeepLoop robustly maps chromatin interactions from sparse allele-resolved or single-cell Hi-C data at kilobase resolution. Nat Genet 54, 1013–1025 (2022)
+   Zhang et al. "DeepLoop robustly maps chromatin interactions from sparse allele-resolved or single-cell Hi-C data at kilobase resolution." *Nat Genet* 54, 1013–1025 (2022).
 
 ## Repository Structure
+
 ```text
-├── README.md                     
+juicer-to-deeploop/
+├── README.md
 ├── config/
-│   └── config.yaml               
+│   └── config.yaml                   # Paths to Juicer and DeepLoop (edit this)
 ├── envs/
-│   ├── environment.yaml          
-│   └── requirements.txt         
-├── juicer_deeploop_pipeline.sh   
+│   └── environment.yaml              # Conda environment definition
+├── juicer_deeploop_pipeline.sh       # Main pipeline script
 └── scripts/
-    ├── deeploop_to_bedpe.py      
-    ├── export_juicer_data.sh     
-    └── process_juicer_output.py
+    ├── export_juicer_data.sh         # Juicer dump wrapper
+    ├── process_juicer_output.py      # Pre-processing (chunk-based, memory-efficient)
+    ├── deeploop_to_bedpe.py          # DBSCAN clustering -> BEDPE
+    └── merge_loops.py                # Multiresolution loop merging
 ```
 
 ## Installation
-### Clone the repository
+
+### 1. Clone the repository
+
 ```bash
 git clone https://github.com/Hartecky/juicer-to-deeploop
 cd juicer-to-deeploop
 ```
 
-### Setup environments
+### 2. Set up the Conda environment
+
 ```bash
-# Create the Conda environment from the YAML file
 conda env create -f envs/environment.yaml
-
-# Activate the environment
-conda activate juicer-to-deeploop-env
-
-# Install python dependencies
-pip install -r envs/requirements.txt
+conda activate juicer-to-deeploop
 ```
-### Setup paths in workflow scripts
 
-**UPDATE THESE PATHS IN juicer_to_deeploop_pipeline.sh SCRIPT**
+### 3. Configure paths
 
-Note: The pipeline assumes that pre-trained DeepLoop models are in $DL_DIR/DeepLoop_models/CPGZ_trained/ downloaded from JinLab repository
+Edit `config/config.yaml` to point to your local installations:
 
-```bash
-JUICER_JAR="/absolute/path/to/juicer_tools.jar"
-DL_DIR="/absolute/path/to/DeepLoop" 
+```yaml
+juicer_jar: "/absolute/path/to/juicer_tools.jar"
+deeploop_dir: "/absolute/path/to/DeepLoop"
+
+model_h5: "DeepLoop_models/CPGZ_trained/LoopDenoise.h5"
+model_json: "DeepLoop_models/CPGZ_trained/LoopDenoise.json"
 ```
-### Optional tuning parameters
-Inside juicer_deeploop_pipeline.sh, you can also adjust the loop filtering thresholds for multiple resolutions as well as DBSCAN parameters for clustering patterns into loops.
 
-Example for resolution 5000:
-
-  - CURRENT_THRESHOLD=0.80 - Keeps top 20% strongest signals
-  - CURRENT_MIN_DIST=4     - Minimum distance in bins from the diagonal (removes local noise)
-  - CURRENT_EPS=3.0        - radius parameter for DBSCAN
-  - CURRENT_MIN_SAMPLES=2  - points parameter for DBSCAN
+> **Note:** Pre-trained DeepLoop models are available at the JinLab repository. The pipeline expects them under `$deeploop_dir/DeepLoop_models/CPGZ_trained/`.
 
 ## Usage
 
-Run the pipeline using the main bash script
-
 ```bash
-./juicer_deeploop_pipeline.sh -i <hic_file> -c <chrom> -r <resolution> -n <norm> -o <output_dir>
-
-Usage: juicer_deeploop_pipeline.sh [OPTIONS]
-
-Multiscale Pipeline for Chromatin Loop Detection (DeepLoop + DBSCAN).
+bash juicer_deeploop_pipeline.sh [OPTIONS]
 
 Required Arguments:
-  -i, --input     <FILE>    Path to input .hic file
-  -c, --chrom     <STR>     Chromosome name (e.g., chr1)
-  -r, --res       <LIST>    Comma-separated resolutions (e.g., 2000,5000,10000)
-  -n  --norm      <STR>     Normalization type (one of KR, SCALE, VC, VC_SQRT, GW_SCALE, INTER_SCALE)
-  -o, --out       <DIR>     Output directory path
+  -i, --input      <FILE>   Path to input .hic file
+  -c, --chrom      <STR>    Chromosome name (e.g., chr1)
+  -r, --res        <LIST>   Comma-separated resolutions (e.g., 2000,5000,10000)
+  -n, --norm       <STR>    Normalization type (KR, SCALE, VC, VC_SQRT, GW_SCALE, INTER_SCALE)
+  -o, --out        <DIR>    Output directory path
 
-Example:
-./juicer_deeploop_pipeline.sh --input data/inter.hic --chrom chr1 --res 2000,5000,10000 --out results_chr1
+Optional Arguments:
+  -t, --tolerance  <INT>    Merge tolerance in bp (Default: 20000)
+  -k, --chunk-size <INT>    Rows per chunk for memory-efficient processing (Default: 2000000)
+  -h, --help                Show this help message
 ```
 
-Example
+### Example
+
 ```bash
-./juicer_deeploop_pipeline.sh \
-  --input data/GM12878.hic \
-  --chrom chr1 \
-  --res 5000 \
-  --norm KR \
-  --out results/chr1_5k
+bash juicer_deeploop_pipeline.sh \
+    --input  data/GM12878.hic \
+    --chrom  chr1 \
+    --res    25000,10000,5000 \
+    --norm   KR \
+    --out    results/GM12878_chr1
 ```
+
+On machines with limited RAM (≤16 GB), reduce chunk size for high-resolution data:
+
+```bash
+bash juicer_deeploop_pipeline.sh \
+    --input      data/GM12878.hic \
+    --chrom      chr1 \
+    --res        25000,10000,5000 \
+    --norm       KR \
+    --out        results/GM12878_chr1 \
+    --chunk-size 1000000
+```
+
+## Optional Tuning
+
+Resolution-specific DBSCAN and filtering parameters are defined inside `juicer_deeploop_pipeline.sh`. Example for 5000 bp:
+
+| Parameter           | Value | Description                                      |
+|---------------------|-------|--------------------------------------------------|
+| `CURRENT_THRESHOLD` | 0.80  | Minimum DeepLoop score (keeps top 20% signals)   |
+| `CURRENT_MIN_DIST`  | 4     | Minimum bin distance from diagonal               |
+| `CURRENT_EPS`       | 3.0   | DBSCAN neighborhood radius (in bins)             |
+| `CURRENT_MIN_SAMPLES` | 2   | Minimum points to form a DBSCAN cluster          |
 
 ## Outputs
-The pipeline creates the following directory structure in your output folder:
 
-  -  final_bedpe/: Main Result. Contains .bedpe files with detected loops (loadable in Juicebox).
-  -  deeploop_out/: Raw output from DeepLoop (denoised probability matrices).
-  -  deeploop_in/: Input text files prepared for DeepLoop.
-  -  raw_dumps/: Raw Observed and OE matrices dumped from Juicer.
-  -  anchors/: Genomic coordinates (BED files) used for mapping bins.
+```text
+results/
+├── final_bedpe/
+│   ├── chr1_25000_loops.bedpe        # Loops per resolution
+│   ├── chr1_10000_loops.bedpe
+│   ├── chr1_5000_loops.bedpe
+│   └── chr1_merged_multires.bedpe    # Final merged result (main output)
+├── deeploop_out/                     # Raw DeepLoop probability matrices
+├── deeploop_in/                      # Pre-processed input files for DeepLoop
+├── raw_dumps/                        # Observed and OE matrices from Juicer
+├── anchors/                          # BED anchor files for bin mapping
+└── logs/
+    ├── pipeline_chr1_<timestamp>.log     # Full run log
+    └── final_summary_chr1_<timestamp>.txt # Per-resolution loop counts and runtime
+```
+
+The `.bedpe` files in `final_bedpe/` can be loaded directly in **Juicebox** alongside the original `.hic` file for visual inspection.
 
 ## TODO
 
-### Additional steps which I would like to improve in this side-project is:
-
-- General code refactor to make it more clean and readable
-- Benchmark time execution for deep sequencing data
-- More work on evaluation different options for DeepLoop thresholding followed by adjusting parameters for DBSCAN
-- Include mode for genome-wide loop calling followed by DBSCAN
+- Benchmark runtime and memory usage across different sequencing depths and resolutions
+- Evaluate alternative DeepLoop thresholding strategies and their effect on DBSCAN parameters
+- Add genome-wide loop calling mode (iterate over all chromosomes)
+- Add support for multi-sample comparison (differential loop calling)

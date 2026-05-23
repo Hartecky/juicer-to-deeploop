@@ -10,6 +10,7 @@ def load_bedpe(filepath):
         # Standard BEDPE columns
         if df.shape[1] >= 6:
             df.columns.values[:6] = ['chr1', 'x1', 'x2', 'chr2', 'y1', 'y2']
+
         # Centroids for distance calculation
         df['cx'] = (df['x1'] + df['x2']) / 2
         df['cy'] = (df['y1'] + df['y2']) / 2
@@ -20,7 +21,6 @@ def load_bedpe(filepath):
 
 def main():
     parser = argparse.ArgumentParser()
-    # Przyjmuje listę plików w formacie: sciezka_2k.bedpe sciezka_5k.bedpe ...
     parser.add_argument("--files", nargs='+', required=True, help="List of BEDPE files to merge")
     parser.add_argument("--resolutions", nargs='+', type=int, required=True, help="List of resolutions corresponding to files (e.g. 2000 5000)")
     parser.add_argument("--out", required=True, help="Output merged file")
@@ -32,7 +32,7 @@ def main():
         print("Error: Number of files must match number of resolutions.")
         return
 
-    # 1. Zorganizuj dane: [(2000, df_2k), (5000, df_5k), ...]
+    # 1. Organize data: [(2000, df_2k), (5000, df_5k), ...]
     data_list = []
     for filepath, res in zip(args.files, args.resolutions):
         print(f"Loading {res}bp: {filepath}")
@@ -41,31 +41,31 @@ def main():
             df['source_res'] = res
             data_list.append((res, df))
     
-    # Sortuj rosnąco po rozdzielczości (2000 ma priorytet przed 10000)
+    # Sort ascending by resolution (2000 has priority over 10000)
     data_list.sort(key=lambda x: x[0])
 
     if not data_list:
         print("No valid loops loaded.")
         return
 
-    # 2. Algorytm Mergowania
-    # Baza = najwyższa rozdzielczość
+    # 2. Merging Algorithm
+    # Base = highest resolution
     final_loops = data_list[0][1].copy()
     print(f"Base loops (from {data_list[0][0]}bp): {len(final_loops)}")
 
-    # Iteruj po pozostałych (niższych) rozdzielczościach
+    # Iterate over remaining (lower) resolutions
     for res, candidate_df in data_list[1:]:
         if final_loops.empty:
             final_loops = pd.concat([final_loops, candidate_df])
             continue
 
-        # Zbuduj drzewo z obecnej bazy
+        # Build tree from current base
         tree = cKDTree(final_loops[['cx', 'cy']].values)
         
-        # Sprawdź kandydatów
+        # Check candidates
         dists, _ = tree.query(candidate_df[['cx', 'cy']].values, k=1, distance_upper_bound=args.tolerance)
         
-        # Jeśli dist == inf, to znaczy brak sąsiada w zasięgu -> Unikalna pętla
+        # If dist == inf, it means no neighbor within range -> Unique loop
         is_unique = (dists == float('inf'))
         unique_loops = candidate_df[is_unique]
         
@@ -75,9 +75,9 @@ def main():
         else:
             print(f"No unique loops in {res}bp")
 
-    # 3. Zapis
+    # 3. Write output
     cols = ['chr1', 'x1', 'x2', 'chr2', 'y1', 'y2', 'name', 'score', 'color', 'source_res']
-    # Dopasuj dostępne kolumny
+    # Match available columns
     out_cols = [c for c in cols if c in final_loops.columns]
     
     final_loops = final_loops.sort_values(by=['chr1', 'x1', 'x2'])

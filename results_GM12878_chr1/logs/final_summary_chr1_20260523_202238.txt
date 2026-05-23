@@ -1,0 +1,24 @@
+========================================
+PIPELINE SUMMARY
+========================================
+Date:           2026-05-23 21:38:18
+Chromosome:     chr1
+Resolutions:    25000,10000,5000
+Normalization:  KR
+Input:          test_data/GSE63525_GM12878_insitu_primary_replicate_combined.hic
+Output dir:     results_GM12878_chr1
+Tolerance:      20000 bp
+Chunk size:     2000000
+
+--- Loops per resolution ---
+   25000 bp:  2604 loops
+   10000 bp:  3794 loops
+    5000 bp:  4214 loops
+
+--- Final merged result ---
+  Loops after merge:  9948
+  Output file:        results_GM12878_chr1/final_bedpe/chr1_merged_multires.bedpe
+
+Total runtime:  4540s (75m 40s)
+Log file:       results_GM12878_chr1/logs/pipeline_chr1_20260523_202238.log
+========================================
