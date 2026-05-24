@@ -165,6 +165,7 @@ def write_bed_reference(anchor_dir, chrom, max_anchor, res, padding_bins=200):
             e = s + res
             f.write(f"{chrom}\t{s}\t{e}\t{i}\n")
     print(f"BED file created: {bed_path} (padding: {padding_bins} bins)")
+    return bed_path
 
 
 def main():
@@ -208,7 +209,7 @@ def main():
 
     print(f"Generating BED reference in: {args.anchor_dir} ...")
     try:
-        write_bed_reference(args.anchor_dir, args.chrom, max_anchor, args.res)
+        bed_path = write_bed_reference(args.anchor_dir, args.chrom, max_anchor, args.res)
     except OSError as e:
         print(f"Error writing BED: {e}")
         sys.exit(1)

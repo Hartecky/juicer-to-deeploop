@@ -32,13 +32,13 @@ CHUNK_SIZE=2000000
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        -i|--input)      HIC_FILE="$2";       shift ;;
-        -c|--chrom)      CHROM="$2";          shift ;;
-        -r|--res)        RES_STRING="$2";     shift ;;
-        -n|--norm)       NORM_STRING="$2";    shift ;;
-        -o|--out)        OUT_DIR="$2";        shift ;;
+        -i|--input)      HIC_FILE="$2";        shift ;;
+        -c|--chrom)      CHROM="$2";           shift ;;
+        -r|--res)        RES_STRING="$2";      shift ;;
+        -n|--norm)       NORM_STRING="$2";     shift ;;
+        -o|--out)        OUT_DIR="$2";         shift ;;
         -t|--tolerance)  MERGE_TOLERANCE="$2"; shift ;;
-        -k|--chunk-size) CHUNK_SIZE="$2";     shift ;;
+        -k|--chunk-size) CHUNK_SIZE="$2";      shift ;;
         -h|--help)       usage; exit 0 ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
@@ -89,7 +89,7 @@ SCRIPT_DBSCAN="scripts/deeploop_to_bedpe.py"
 SCRIPT_MERGE="scripts/merge_loops.py"
 SCRIPT_DUMP="scripts/export_juicer_data.sh"
 
-# Create directories
+# Create base directories
 mkdir -p "$OUT_DIR"/{raw_dumps,anchors,deeploop_in,deeploop_out,final_bedpe}
 
 # Setup logging
@@ -135,6 +135,9 @@ for RES in "${RES_ARRAY[@]}"; do
     DL_INPUT="$OUT_DIR/deeploop_in/${CHROM}_${RES}_input.txt"
     DL_OUTPUT="$OUT_DIR/deeploop_out/${CHROM}_${RES}.denoised.anchor.to.anchor"
     BEDPE_OUTPUT="$OUT_DIR/final_bedpe/${CHROM}_${RES}_loops.bedpe"
+    ANCHOR_DIR="$OUT_DIR/anchors/$RES"
+
+    mkdir -p "$ANCHOR_DIR"
 
     # CONFIGURATION OF SENSITIVITY
     if (( RES == 25000 )); then
@@ -194,7 +197,7 @@ for RES in "${RES_ARRAY[@]}"; do
         --chrom      "$CHROM" \
         --res        "$RES" \
         --out        "$DL_INPUT" \
-        --anchor-dir "$OUT_DIR/anchors" \
+        --anchor-dir "$ANCHOR_DIR" \
         --chunk-size "$CHUNK_SIZE"
 
     # [3/5] Run DeepLoop model
@@ -209,7 +212,7 @@ for RES in "${RES_ARRAY[@]}"; do
             --full_matrix_dir "$OUT_DIR/deeploop_in" \
             --input_name      "$(basename "$DL_INPUT")" \
             --out_dir         "$RES_OUT_DIR" \
-            --anchor_dir      "$OUT_DIR/anchors" \
+            --anchor_dir      "$ANCHOR_DIR" \
             --h5_file         "$MODEL_H5" \
             --json_file       "$MODEL_JSON" \
             --chromosome      "$CHROM" \
@@ -231,13 +234,13 @@ for RES in "${RES_ARRAY[@]}"; do
     # [4/5] DBSCAN clustering -> BEDPE
     echo "[4/5] Clustering (DBSCAN) -> BEDPE..."
     python "$SCRIPT_DBSCAN" \
-        --input      "$DL_OUTPUT" \
-        --out        "$BEDPE_OUTPUT" \
-        --chrom      "$CHROM" \
-        --res        "$RES" \
-        --min-dist   "$CURRENT_MIN_DIST" \
-        --threshold  "$CURRENT_THRESHOLD" \
-        --eps        "$CURRENT_EPS" \
+        --input       "$DL_OUTPUT" \
+        --out         "$BEDPE_OUTPUT" \
+        --chrom       "$CHROM" \
+        --res         "$RES" \
+        --min-dist    "$CURRENT_MIN_DIST" \
+        --threshold   "$CURRENT_THRESHOLD" \
+        --eps         "$CURRENT_EPS" \
         --min-samples "$CURRENT_MIN_SAMPLES"
 
     # Count loops and store for summary
