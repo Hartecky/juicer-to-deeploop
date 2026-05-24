@@ -37,7 +37,7 @@ juicer-to-deeploop/
 │   └── config.yaml                   # Paths to Juicer and DeepLoop (edit this)
 ├── envs/
 │   └── environment.yaml              # Conda environment definition
-├── juicer_deeploop_pipeline.sh       # Main pipeline script
+├── juicer-to-deeploop.sh             # Main pipeline script
 └── scripts/
     ├── export_juicer_data.sh         # Juicer dump wrapper
     ├── process_juicer_output.py      # Pre-processing (chunk-based, memory-efficient)
@@ -78,7 +78,7 @@ model_json: "DeepLoop_models/CPGZ_trained/LoopDenoise.json"
 ## Usage
 
 ```bash
-bash juicer_deeploop_pipeline.sh [OPTIONS]
+bash juicer-to-deeploop.sh [OPTIONS]
 
 Required Arguments:
   -i, --input      <FILE>   Path to input .hic file
@@ -96,7 +96,7 @@ Optional Arguments:
 ### Example
 
 ```bash
-bash juicer_deeploop_pipeline.sh \
+bash juicer-to-deeploop.sh \
     --input  data/GM12878.hic \
     --chrom  chr1 \
     --res    25000,10000,5000 \
@@ -107,7 +107,7 @@ bash juicer_deeploop_pipeline.sh \
 On machines with limited RAM (≤16 GB), reduce chunk size for high-resolution data:
 
 ```bash
-bash juicer_deeploop_pipeline.sh \
+bash juicer-to-deeploop.sh \
     --input      data/GM12878.hic \
     --chrom      chr1 \
     --res        25000,10000,5000 \
@@ -118,34 +118,60 @@ bash juicer_deeploop_pipeline.sh \
 
 ## Optional Tuning
 
-Resolution-specific DBSCAN and filtering parameters are defined inside `juicer_deeploop_pipeline.sh`. Example for 5000 bp:
+Resolution-specific DBSCAN and filtering parameters are defined inside `juicer-to-deeploop.sh`. Example for 5000 bp:
 
-| Parameter           | Value | Description                                      |
-|---------------------|-------|--------------------------------------------------|
-| `CURRENT_THRESHOLD` | 0.80  | Minimum DeepLoop score (keeps top 20% signals)   |
-| `CURRENT_MIN_DIST`  | 4     | Minimum bin distance from diagonal               |
-| `CURRENT_EPS`       | 3.0   | DBSCAN neighborhood radius (in bins)             |
-| `CURRENT_MIN_SAMPLES` | 2   | Minimum points to form a DBSCAN cluster          |
+| Parameter             | Value | Description                                    |
+|-----------------------|-------|------------------------------------------------|
+| `CURRENT_THRESHOLD`   | 0.80  | Minimum DeepLoop score (keeps top 20% signals) |
+| `CURRENT_MIN_DIST`    | 4     | Minimum bin distance from diagonal             |
+| `CURRENT_EPS`         | 3.0   | DBSCAN neighborhood radius (in bins)           |
+| `CURRENT_MIN_SAMPLES` | 2     | Minimum points to form a DBSCAN cluster        |
 
 ## Outputs
 
 ```text
 results/
 ├── final_bedpe/
-│   ├── chr1_25000_loops.bedpe        # Loops per resolution
+│   ├── chr1_25000_loops.bedpe         # Loops per resolution
 │   ├── chr1_10000_loops.bedpe
 │   ├── chr1_5000_loops.bedpe
-│   └── chr1_merged_multires.bedpe    # Final merged result (main output)
-├── deeploop_out/                     # Raw DeepLoop probability matrices
-├── deeploop_in/                      # Pre-processed input files for DeepLoop
-├── raw_dumps/                        # Observed and OE matrices from Juicer
-├── anchors/                          # BED anchor files for bin mapping
+│   └── chr1_merged_multires.bedpe     # Final merged result (main output)
+├── deeploop_out/                      # Raw DeepLoop probability matrices
+├── deeploop_in/                       # Pre-processed input files for DeepLoop
+├── raw_dumps/                         # Observed and OE matrices from Juicer
+├── anchors/
+│   ├── 25000/chr1.bed                 # Resolution-specific BED anchor files
+│   ├── 10000/chr1.bed
+│   └── 5000/chr1.bed
 └── logs/
-    ├── pipeline_chr1_<timestamp>.log     # Full run log
+    ├── pipeline_chr1_<timestamp>.log      # Full run log
     └── final_summary_chr1_<timestamp>.txt # Per-resolution loop counts and runtime
 ```
 
 The `.bedpe` files in `final_bedpe/` can be loaded directly in **Juicebox** alongside the original `.hic` file for visual inspection.
+
+## Performance
+
+Benchmarked on **GM12878 in-situ Hi-C** (Rao et al. 2014, GEO: GSE63525), chromosome 1 (~249 Mbp), resolutions 25000/10000/5000 bp, KR normalization.
+
+**Hardware:** 12th Gen Intel Core i5-12450H (2.00 GHz), 16 GB RAM, WSL2 Ubuntu (no GPU)
+
+| Resolution | Loops detected | Runtime  |
+|------------|---------------|----------|
+| 25 000 bp  | 2 604         | ~15 min  |
+| 10 000 bp  | 3 794         | ~25 min  |
+|  5 000 bp  | 4 214         | ~35 min  |
+| **Merged** | **9 948**     | **~76 min total** |
+
+> Memory note: processing chr1 at 5000 bp resolution generates ~61M interactions. The default chunk size of 2 000 000 rows keeps peak RAM usage under 4 GB. On machines with ≤16 GB RAM, use `--chunk-size 1000000`.
+
+## Example Output
+
+Loops detected in GM12878 chr1 visualized in **Juicebox** alongside the original `.hic` contact map (data: Rao et al. 2014, Aidenlab).
+The contact map shows a region of GM12878 chr1 (178–185 Mb) at 5 kb resolution, visualized in Juicebox. The red heatmap represents Hi-C contact frequency — darker red indicates stronger chromatin interactions. Blue squares mark loop calls produced by the pipeline. The calls align well with the prominent topological domains (TADs) visible along the diagonal, and several loops are correctly anchored at domain boundaries, which is consistent with known CTCF-mediated looping in GM12878. A visible positional shift in some loop calls relative to the brightest pixels of the contact map suggests that DBSCAN clustering parameters (particularly eps and min_samples) have room for further tuning — tighter clustering at 5 kb resolution may better center calls on peak signal.
+
+![Juicebox chr1 loops](docs/juicebox_chr1_example.png)
+
 
 ## TODO
 
