@@ -168,10 +168,8 @@ Benchmarked on **GM12878 in-situ Hi-C** (Rao et al. 2014, GEO: GSE63525), chromo
 ## Example Output
 
 Loops detected in GM12878 chr1 visualized in **Juicebox** alongside the original `.hic` contact map (data: Rao et al. 2014, Aidenlab).
+The contact map shows a region of GM12878 chr1 (178–185 Mb) at 5 kb resolution, visualized in Juicebox. The red heatmap represents Hi-C contact frequency — darker red indicates stronger chromatin interactions. Blue squares mark loop calls produced by the pipeline. The calls align well with the prominent topological domains (TADs) visible along the diagonal, and several loops are correctly anchored at domain boundaries, which is consistent with known CTCF-mediated looping in GM12878. A visible positional shift in some loop calls relative to the brightest pixels of the contact map suggests that DBSCAN clustering parameters (particularly eps and min_samples) have room for further tuning — tighter clustering at 5 kb resolution may better center calls on peak signal.
 
-> Screenshot coming soon — chr1 multiresolution loop calls at 5 kb resolution loaded as a 2D annotation track in Juicebox.
-
-Add screenshot here after Juicebox visualization:
 ![Juicebox chr1 loops](docs/juicebox_chr1_example.png)
 
 
