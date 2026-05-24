@@ -179,3 +179,7 @@ The contact map shows a region of GM12878 chr1 (178–185 Mb) at 5 kb resolution
 - Evaluate alternative DeepLoop thresholding strategies and their effect on DBSCAN parameters
 - Add genome-wide loop calling mode (iterate over all chromosomes)
 - Add support for multi-sample comparison (differential loop calling)
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
